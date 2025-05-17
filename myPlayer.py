@@ -11,6 +11,8 @@ from random import choice
 from playerInterface import *
 import random
 
+TIME_LIMIT = 1.0  # secondes par coup
+MAX_IDS_DEPTH = 6  # Limite de profondeur maximale pour l'IDS
 class myPlayer(PlayerInterface):
     """Joueur de Go IA de base : greedy (score immédiat). À améliorer !"""
 
@@ -25,10 +27,6 @@ class myPlayer(PlayerInterface):
         return "Karim & Hassen"
 
     def evaluate(self, fast=False):
-        # DEBUG: Affichage du plateau avant évaluation pour traquer les désynchronisations
-        # print("[DEBUG] Plateau interne avant évaluation :")
-        # self._board.prettyPrint()
-        # Si la partie est terminée, on peut utiliser le score final
         if self._board.is_game_over():
             score = self._board.final_go_score()
             if isinstance(score, tuple) and len(score) == 2:
@@ -131,7 +129,6 @@ class myPlayer(PlayerInterface):
             -0.5 * (weak_black - weak_white)
         )
         # Ajout d'un bruit aléatoire pour éviter les parties trop mécaniques
-        # (Désactiver pour vérifier si le bug disparaît)
         # noise = random.gauss(0, 0.5)  # moyenne 0, écart-type 0.5
         # score += noise
         if self._mycolor == Goban.Board._BLACK:
@@ -219,8 +216,6 @@ class myPlayer(PlayerInterface):
             return minEval, best_move
 
     def getPlayerMove(self):
-        import time
-        MAX_IDS_DEPTH = 6  # Limite de profondeur maximale pour l'IDS
         # 1. Vérification stricte : ne jamais jouer si la partie est finie
         if self._board.is_game_over():
             print("Referee told me to play but the game is over!")
@@ -245,7 +240,7 @@ class myPlayer(PlayerInterface):
             return "PASS"
         maximizing = (self._board._nextPlayer == self._mycolor)
         fast_score = self.evaluate(fast=True)
-        # Nouvelle stratégie : passage automatique seulement si l'adversaire a passé ET qu'il reste moins de 10 coups
+        # Stratégie : passage automatique seulement si l'adversaire a passé ET qu'il reste moins de 10 coups
         total_moves = len(self._board._history) if hasattr(self._board, '_history') else 0
         max_moves_possible = self._board._BOARDSIZE * self._board._BOARDSIZE
         last_opponent_pass = False
@@ -275,7 +270,7 @@ class myPlayer(PlayerInterface):
                 print("Je suis largement devant et aucun coup n'améliore mon score, je passe.")
                 return "PASS"
         # Gestion du temps pour optimiser la profondeur de recherche
-        TIME_LIMIT = 1.0  # secondes par coup (ajustez selon le tournoi)
+  
         start_time = time.time()
         best_move = None
         best_value = float('-inf') if maximizing else float('inf')
@@ -313,16 +308,10 @@ class myPlayer(PlayerInterface):
     def playOpponentMove(self, move):
         print("Opponent played ", move)
         if self._board.is_game_over():
-            print("[DEBUG] Game is already over, not pushing move.")
             return
-        print(f"[DEBUG] Avant push: len(_history)={len(self._board._history) if hasattr(self._board, '_history') else 'NA'}")
+
         self._board.push(Goban.Board.name_to_flat(move))
-        print(f"[DEBUG] Après push: len(_history)={len(self._board._history) if hasattr(self._board, '_history') else 'NA'}")
-        print("[DEBUG] Plateau interne après coup adverse :")
-        self._board.prettyPrint()
-        if self._board.is_game_over():
-            print("[DEBUG] Game is now over after opponent move.")
-            self._board.prettyPrint()
+
 
     def newGame(self, color):
         self._mycolor = color
