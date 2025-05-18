@@ -26,6 +26,7 @@ class myPlayer(PlayerInterface):
         self._board = Goban.Board()
         self._mycolor = None
         self.corners = [0, 7, 56, 63]
+        self.time_left = 30 * 60  
 
     def evaluate(self, board):
         b = list(board)
@@ -220,16 +221,24 @@ class myPlayer(PlayerInterface):
         if self._board.is_game_over():
             print("Referee told me to play but the game is over!")
             return "PASS"
+        if self.time_left <= 0:
+            print("Timeout: plus de temps disponible, je passe.")
+            return "PASS"
+        start_time = time()
         move = self.selectNextMove()
         self._board.push(move)
         print("I am playing", self._board.move_to_str(move))
-        print("My current board:")
-        self._board.prettyPrint()
+        self._board.prettyPrint()  
+        elapsed = time() - start_time
+        self.time_left -= elapsed
         return Goban.Board.flat_to_name(move)
 
     def playOpponentMove(self, move):
         print("Opponent played", move)
-        self._board.push(Goban.Board.name_to_flat(move))
+        if isinstance(move, int):
+            self._board.push(move)
+        else:
+            self._board.push(Goban.Board.name_to_flat(move))
 
     def newGame(self, color):
         self._mycolor = color
@@ -238,4 +247,5 @@ class myPlayer(PlayerInterface):
     def endGame(self, winner):
         black_score, white_score = self._board.compute_score()
         print(f"Final Score: Black = {black_score}, White = {white_score}")
+        self._board.prettyPrint()  
         print("I won!!!" if self._mycolor == winner else "I lost :(!!")
