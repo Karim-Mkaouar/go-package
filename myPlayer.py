@@ -26,6 +26,19 @@ class myPlayer(PlayerInterface):
     def getPlayerName(self):
         return "Karim & Hassen"
 
+    def _move_priority(self, move):
+        # Priorité : coins > bords > centre > 1ère ligne hors coins
+        size = self._board._BOARDSIZE
+        x, y = move % size, move // size
+        corners = [(0,0), (0,size-1), (size-1,0), (size-1,size-1)]
+        if (x, y) in corners:
+            return 0  # Coin
+        if x == 0 or x == size-1 or y == 0 or y == size-1:
+            return 1  # Bord
+        if x == 1 or x == size-2 or y == 1 or y == size-2:
+            return 2  # 2e ligne
+        return 3  # Centre
+
     def evaluate(self, fast=False):
         if self._board.is_game_over():
             score = self._board.final_go_score()
@@ -63,26 +76,24 @@ class myPlayer(PlayerInterface):
                 return blacks - whites
             else:
                 return whites - blacks
-        # Heuristique avancée : différence de pions + libertés + atari + coins
-        liberties_black = 0
-        liberties_white = 0
-        atari_black = 0
-        atari_white = 0
-        weak_black = 0
-        weak_white = 0
-        coin_black = 0
-        coin_white = 0
+        # Nouvelle heuristique avancée sans dépendre de myPackage.py
         size = self._board._BOARDSIZE
         board = self._board._board
+        my_color = self._mycolor
+        oppo_color = Goban.Board.flip(my_color)
         visited = set()
-        corners = [0, size-1, size*(size-1), size*size-1]
+        my_groups = []
+        oppo_groups = []
+        my_groups_liberties = []
+        oppo_groups_liberties = []
+        # Groupes et libertés (sans import externe)
         def neighbors(idx):
             x, y = idx % size, idx // size
             for dx, dy in [(-1,0),(1,0),(0,-1),(0,1)]:
                 nx, ny = x+dx, y+dy
                 if 0 <= nx < size and 0 <= ny < size:
                     yield ny*size+nx
-        def group_liberties(idx, color):
+        def group_liberties(idx, color, group_set):
             group = set()
             libs = set()
             stack = [idx]
@@ -96,52 +107,62 @@ class myPlayer(PlayerInterface):
                         libs.add(n)
                     elif board[n] == color and n not in group:
                         stack.append(n)
+            group_set.update(group)
             return libs, group
         for i in range(size*size):
             if i in visited:
                 continue
-            if board[i] == Goban.Board._BLACK:
-                libs, group = group_liberties(i, Goban.Board._BLACK)
-                liberties_black += len(libs)
-                if len(libs) == 1:
-                    atari_black += 1
-                if 1 <= len(libs) <= 2:
-                    weak_black += 1
-                if any(c in group for c in corners):
-                    coin_black += 1
+            if board[i] == my_color:
+                group_set = set()
+                libs, group = group_liberties(i, my_color, group_set)
+                my_groups.append(list(group))
+                my_groups_liberties.append(len(libs))
                 visited.update(group)
-            elif board[i] == Goban.Board._WHITE:
-                libs, group = group_liberties(i, Goban.Board._WHITE)
-                liberties_white += len(libs)
-                if len(libs) == 1:
-                    atari_white += 1
-                if 1 <= len(libs) <= 2:
-                    weak_white += 1
-                if any(c in group for c in corners):
-                    coin_white += 1
+            elif board[i] == oppo_color:
+                group_set = set()
+                libs, group = group_liberties(i, oppo_color, group_set)
+                oppo_groups.append(list(group))
+                oppo_groups_liberties.append(len(libs))
                 visited.update(group)
-        # Pondération des critères
+        # Bonus pour capture imminente
+        capture_bonus = 0
+        for g in oppo_groups_liberties:
+            if g == 1:
+                capture_bonus += 30
+            if g == 0:
+                capture_bonus += 100
+        # Malus pour groupes faibles
+        weak_penalty = 0
+        for g in my_groups_liberties:
+            if g == 1:
+                weak_penalty -= 40
+        # Bonus pour taille de groupe et libertés
+        group_score = 0
+        for i, group in enumerate(my_groups):
+            group_score += len(group) * my_groups_liberties[i] + my_groups_liberties[i] * 5
+        for i, group in enumerate(oppo_groups):
+            group_score -= len(group) * oppo_groups_liberties[i]
+        # Score de base (territoire)
+        blacks = sum(1 for i in range(size*size) if board[i] == Goban.Board._BLACK)
+        whites = sum(1 for i in range(size*size) if board[i] == Goban.Board._WHITE)
+        base_score = (blacks - whites) if my_color == Goban.Board._BLACK else (whites - blacks)
+        # Pondération finale
         score = (
-            1.0 * (blacks - whites) +
-            0.2 * (liberties_black - liberties_white) +
-            0.8 * (coin_black - coin_white) +
-            -1.0 * (atari_black - atari_white) +
-            -0.5 * (weak_black - weak_white)
+            base_score +
+            0.2 * (sum(my_groups_liberties) - sum(oppo_groups_liberties)) +
+            capture_bonus +
+            weak_penalty +
+            0.5 * group_score
         )
-        # Ajout d'un bruit aléatoire pour éviter les parties trop mécaniques
-        # noise = random.gauss(0, 0.5)  # moyenne 0, écart-type 0.5
-        # score += noise
-        if self._mycolor == Goban.Board._BLACK:
-            return score
-        else:
-            return -score
+        return score
 
     def minimax(self, depth, maximizingPlayer, consecutive_passes=0):
         if depth == 0 or self._board.is_game_over() or consecutive_passes >= 2:
             return self.evaluate(fast=True), None
         moves = self._board.legal_moves()
         non_pass_moves = [move for move in moves if self._board.flat_to_name(move) != "PASS"]
-        non_pass_moves = non_pass_moves[:self._max_moves]
+        # Correction : on n'applique plus de limitation arbitraire sur le nombre de coups explorés
+        # non_pass_moves = non_pass_moves[:self._max_moves]  # SUPPRIMÉ
         if not non_pass_moves:
             self._board.push(Goban.Board.name_to_flat("PASS"))
             value, _ = self.minimax(depth-1, not maximizingPlayer, consecutive_passes+1)
@@ -175,7 +196,8 @@ class myPlayer(PlayerInterface):
             return self.evaluate(fast=True), None
         moves = self._board.legal_moves()
         non_pass_moves = [move for move in moves if self._board.flat_to_name(move) != "PASS"]
-        non_pass_moves = non_pass_moves[:self._max_moves]
+        # Trie les coups pour explorer d'abord coins/bords
+        non_pass_moves.sort(key=self._move_priority)
         if not non_pass_moves:
             # Simulate a PASS
             self._board.push(Goban.Board.name_to_flat("PASS"))
@@ -218,12 +240,10 @@ class myPlayer(PlayerInterface):
     def getPlayerMove(self):
         # 1. Vérification stricte : ne jamais jouer si la partie est finie
         if self._board.is_game_over():
-            print("Referee told me to play but the game is over!")
             return "PASS"
         moves = self._board.legal_moves()
         # 2. Si la seule action légale est PASS, on retourne PASS immédiatement
         if len(moves) == 1 and self._board.flat_to_name(moves[0]) == "PASS":
-            print("[SECURE] Seul coup légal : PASS. Je passe.")
             return "PASS"
         # 3. Vérification stricte de la fin (deux PASS consécutifs dans l'historique)
         history = getattr(self._board, '_history', [])
@@ -231,15 +251,29 @@ class myPlayer(PlayerInterface):
             last1 = self._board.flat_to_name(history[-1]) if isinstance(history[-1], int) else None
             last2 = self._board.flat_to_name(history[-2]) if isinstance(history[-2], int) else None
             if last1 == "PASS" and last2 == "PASS":
-                print("[SECURE] Deux PASS consécutifs détectés dans l'historique, la partie est finie. Je passe.")
                 return "PASS"
         # 4. Si aucun coup non-PASS n'est possible, on passe
         non_pass_moves = [move for move in moves if self._board.flat_to_name(move) != "PASS"]
         if len(non_pass_moves) == 0:
-            print("[SECURE] Plateau plein ou aucun coup non-PASS possible, je passe.")
+            return "PASS"
+        # 5. Si le nombre de pierres sur le plateau est très faible en fin de partie, on passe (sécurité)
+        blacks = sum(1 for i in range(self._board._BOARDSIZE**2) if self._board._board[i] == Goban.Board._BLACK)
+        whites = sum(1 for i in range(self._board._BOARDSIZE**2) if self._board._board[i] == Goban.Board._WHITE)
+        if blacks + whites < 5 and len(history) > 100:
             return "PASS"
         maximizing = (self._board._nextPlayer == self._mycolor)
         fast_score = self.evaluate(fast=True)
+        # Nouvelle règle : si aucun coup ne permet d'améliorer le score rapide, on passe
+        can_improve = False
+        for move in non_pass_moves:
+            self._board.push(move)
+            score_after = self.evaluate(fast=True)
+            self._board.pop()
+            if (self._mycolor == Goban.Board._BLACK and score_after > fast_score) or (self._mycolor == Goban.Board._WHITE and score_after > fast_score):
+                can_improve = True
+                break
+        if not can_improve:
+            return "PASS"
         # Stratégie : passage automatique seulement si l'adversaire a passé ET qu'il reste moins de 10 coups
         total_moves = len(self._board._history) if hasattr(self._board, '_history') else 0
         max_moves_possible = self._board._BOARDSIZE * self._board._BOARDSIZE
@@ -253,7 +287,6 @@ class myPlayer(PlayerInterface):
         if allow_auto_pass:
             pass_score_limit = -10
             if (self._mycolor == Goban.Board._BLACK and fast_score < pass_score_limit) or (self._mycolor == Goban.Board._WHITE and fast_score < pass_score_limit):
-                print("Score trop défavorable, je passe (fin de partie, adversaire a passé).")
                 return "PASS"
         # Si je suis largement gagnant ET que tous les coups n'améliorent pas mon score, je passe aussi
         if (self._mycolor == Goban.Board._BLACK and fast_score > 20) or (self._mycolor == Goban.Board._WHITE and fast_score > 20):
@@ -267,7 +300,6 @@ class myPlayer(PlayerInterface):
                     can_improve = True
                     break
             if not can_improve:
-                print("Je suis largement devant et aucun coup n'améliore mon score, je passe.")
                 return "PASS"
         # Gestion du temps pour optimiser la profondeur de recherche
   
@@ -297,33 +329,20 @@ class myPlayer(PlayerInterface):
             if time.time() - start_time > TIME_LIMIT * 0.9:
                 break
         if best_move is None:
-            print("No legal move found after alphabeta, playing PASS.")
             return "PASS"
         self._board.push(best_move)
-        print(f"I am playing {self._board.move_to_str(best_move)} (profondeur atteinte : {depth-1})")
-        print("My current board :")
-        self._board.prettyPrint()
         return Goban.Board.flat_to_name(best_move)
 
     def playOpponentMove(self, move):
-        print("Opponent played ", move)
-        if self._board.is_game_over():
-            return
-
+        print("Opponent played ", move) # New here
+        # the board needs an internal represetation to push the move.  Not a string
         self._board.push(Goban.Board.name_to_flat(move))
-
 
     def newGame(self, color):
         self._mycolor = color
         self._opponent = Goban.Board.flip(color)
 
     def endGame(self, winner):
-        print(f"Ma couleur : {self._mycolor} (1=Noir, 2=Blanc)")
-        print(f"Vainqueur annoncé par l'arbitre : {winner} (1=Noir, 2=Blanc, 0=Égalité)")
-        board_result = self._board.result()
-        print(f"Résultat selon Goban.Board.result() : {board_result}")
-        final_score = self._board.final_go_score()
-        print(f"Score final détaillé (final_go_score) : {final_score}")
         if self._mycolor == winner:
             print("I won!!!")
         else:
