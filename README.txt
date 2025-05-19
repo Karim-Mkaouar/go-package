@@ -1,32 +1,34 @@
 myPlayer.py
 -----------
-Ce fichier contient toute l’IA du binôme pour le tournoi de Go.
+Ce fichier contient notre IA pour le tournoi de Go (Karim Mkaouar & Hassen Akrout).
 
 - Heuristique avancée (evaluate) :
-    - Calcule le score du plateau en prenant en compte du Différence de pions,Libertés des groupes, Groupes faibles/forts, Atari et Contrôle des coins.
-    - En début de partie, l’IA privilégie la prise de coins pour contrôler la zone.
+    - Prend en compte la différence de pions, les libertés des groupes, la faiblesse/force des groupes, l'atari, la capture de coins et la balance des libertés.
+    - Bonus pour la prise de coins et de bords.
     - Si l’IA a le double du score adverse, elle considère la partie gagnée et arrête la recherche.
     - Si un groupe n’a plus de liberté, il est considéré comme perdu.
     - Si l’adversaire n’a plus de liberté, l’IA considère la victoire acquise.
+    - Ajout d’un bruit aléatoire pour éviter les égalités systématiques.
 
-- Gestion de la fin de partie:
+- Gestion stricte du temps :
+    - Chaque joueur dispose de 30 minutes (1800 secondes) pour toute la partie (self.time_left).
+    - À chaque coup, le temps réellement consommé est soustrait du temps restant.
+    - Si le temps est écoulé, l’IA passe automatiquement.
+    - Le temps maximal par coup est limité à 5 secondes ou au temps restant.
+
+- Gestion de la fin de partie :
     - L’IA ne joue jamais de coup illégal après la fin (vérification stricte dans getPlayerMove).
     - Retourne "PASS" si la partie est finie, si deux PASS consécutifs sont joués, ou si la seule action légale est PASS.
 
 - Recherche de coup (Minimax/IDS/alphabeta) :
-    - Utilise l’algorithme "iterative deepening search" (IDS) pour explorer les coups possibles jusqu’à une profondeur maximale, en respectant une limite de temps par coup.
+    - Utilise l’algorithme "iterative deepening search" (IDS) pour explorer les coups possibles jusqu’à une profondeur maximale, en respectant la limite de temps par coup.
     - IDS utilise l’algorithme Minimax avec élagage Alpha-Bêta pour accélérer la recherche et éviter les branches inutiles.
     - Le choix du coup se fait toujours parmi les coups légaux, en évitant tout coup illégal ou non pertinent.
------------
 
------------
-Binome: 
+
+Binôme :
     - Karim Mkaouar
     - Hassen Akrout
------------
-
-
-
 
 
 Goban.py 
