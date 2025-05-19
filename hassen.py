@@ -190,7 +190,7 @@ class myPlayer(PlayerInterface):
             depth += 1
         return result
 
-    def selectNextMove(self):
+    def selectNextMove(self, time_limit):
         legalMoves = self._board.generate_legal_moves()
         if -1 in legalMoves:
             legalMoves.remove(-1)
@@ -206,7 +206,7 @@ class myPlayer(PlayerInterface):
         bestMove, maxGain = None, -math.inf
         for m in legalMoves:
             self._board.push(m)
-            gain = self.iterativeDeepeningSearch(self._board, 0.5 / len(legalMoves))
+            gain = self.iterativeDeepeningSearch(self._board, time_limit / len(legalMoves))
             self._board.pop()
             if gain >= self.pruneScore:
                 return m
@@ -224,8 +224,9 @@ class myPlayer(PlayerInterface):
         if self.time_left <= 0:
             print("Timeout: plus de temps disponible, je passe.")
             return "PASS"
+        TIME_LIMIT = min(5.0, self.time_left)  
         start_time = time()
-        move = self.selectNextMove()
+        move = self.selectNextMove(TIME_LIMIT)
         self._board.push(move)
         print("I am playing", self._board.move_to_str(move))
         self._board.prettyPrint()  
